@@ -1,44 +1,52 @@
 [
-  {
-    "guid": "a5e4d291-7643-41bb-b892-91e84fc5711b",
-    "name": "Terminal",
-    "description": "Terminal web interactiva integrada en el Dashboard de Jellyfin para administradores.",
-    "overview": "Terminal interactiva en tiempo real para administracion del servidor.",
-    "owner": "emulemexico",
-    "category": "General",
-    "versions": [
-      {
-        "version": "1.0.0.3",
-        "changelog": "Compatibilidad universal con Jellyfin 10.11.x (targetAbi 10.11.0.0).",
-        "targetAbi": "10.11.0.0",
-        "sourceUrl": "https://github.com/emulemexico/Jellyfin-Terminal/releases/download/v1.0.0.0/Jellyfin.Plugin.Terminal_1.0.0.0.zip",
-        "checksum": "5dd80815a1188ddf331fc469d9b80cd6",
-        "timestamp": "2026-09-08T20:07:16Z"
-      },
-      {
-        "version": "1.0.0.2",
-        "changelog": "Compatibilidad universal con Jellyfin 10.10.x (targetAbi 10.10.0.0).",
-        "targetAbi": "10.10.0.0",
-        "sourceUrl": "https://github.com/emulemexico/Jellyfin-Terminal/releases/download/v1.0.0.0/Jellyfin.Plugin.Terminal_1.0.0.0.zip",
-        "checksum": "5dd80815a1188ddf331fc469d9b80cd6",
-        "timestamp": "2026-09-08T20:07:16Z"
-      },
-      {
-        "version": "1.0.0.1",
-        "changelog": "Compatibilidad universal con Jellyfin 10.9.x (targetAbi 10.9.0.0).",
-        "targetAbi": "10.9.0.0",
-        "sourceUrl": "https://github.com/emulemexico/Jellyfin-Terminal/releases/download/v1.0.0.0/Jellyfin.Plugin.Terminal_1.0.0.0.zip",
-        "checksum": "5dd80815a1188ddf331fc469d9b80cd6",
-        "timestamp": "2026-09-08T20:07:16Z"
-      },
-      {
-        "version": "1.0.0.0",
-        "changelog": "Compatibilidad universal con Jellyfin 10.8.x (targetAbi 10.8.0.0).",
-        "targetAbi": "10.8.0.0",
-        "sourceUrl": "https://github.com/emulemexico/Jellyfin-Terminal/releases/download/v1.0.0.0/Jellyfin.Plugin.Terminal_1.0.0.0.zip",
-        "checksum": "5dd80815a1188ddf331fc469d9b80cd6",
-        "timestamp": "2026-09-08T20:07:16Z"
-      }
-    ]
-  }
+{
+    "guid":  "a5e4d291-7643-41bb-b892-91e84fc5711b",
+    "name":  "Terminal",
+    "description":  "Terminal web interactiva integrada en el Dashboard de Jellyfin para administradores.",
+    "overview":  "Terminal interactiva en tiempo real para administracion del servidor.",
+    "owner":  "emulemexico",
+    "category":  "General",
+    "versions":  [
+                     {
+                         "version":  "1.0.1.0",
+                         "changelog":  "Fix WebSocket connection and admin auth handling",
+                         "targetAbi":  "10.8.0.0",
+                         "sourceUrl":  "https://github.com/emulemexico/Jellyfin-Terminal/releases/download/v1.0.1.0/Jellyfin.Plugin.Terminal_1.0.1.0.zip",
+                         "checksum":  "1b0eb95d4316cbcd69f82fa1371eb379",
+                         "timestamp":  "2026-09-08T20:20:46Z"
+                     },
+                     {
+                         "version":  "1.0.0.3",
+                         "changelog":  "Compatibilidad universal con Jellyfin 10.11.x (targetAbi 10.11.0.0).",
+                         "targetAbi":  "10.11.0.0",
+                         "sourceUrl":  "https://github.com/emulemexico/Jellyfin-Terminal/releases/download/v1.0.0.0/Jellyfin.Plugin.Terminal_1.0.0.0.zip",
+                         "checksum":  "5dd80815a1188ddf331fc469d9b80cd6",
+                         "timestamp":  "2026-09-08T20:07:16Z"
+                     },
+                     {
+                         "version":  "1.0.0.2",
+                         "changelog":  "Compatibilidad universal con Jellyfin 10.10.x (targetAbi 10.10.0.0).",
+                         "targetAbi":  "10.10.0.0",
+                         "sourceUrl":  "https://github.com/emulemexico/Jellyfin-Terminal/releases/download/v1.0.0.0/Jellyfin.Plugin.Terminal_1.0.0.0.zip",
+                         "checksum":  "5dd80815a1188ddf331fc469d9b80cd6",
+                         "timestamp":  "2026-09-08T20:07:16Z"
+                     },
+                     {
+                         "version":  "1.0.0.1",
+                         "changelog":  "Compatibilidad universal con Jellyfin 10.9.x (targetAbi 10.9.0.0).",
+                         "targetAbi":  "10.9.0.0",
+                         "sourceUrl":  "https://github.com/emulemexico/Jellyfin-Terminal/releases/download/v1.0.0.0/Jellyfin.Plugin.Terminal_1.0.0.0.zip",
+                         "checksum":  "5dd80815a1188ddf331fc469d9b80cd6",
+                         "timestamp":  "2026-09-08T20:07:16Z"
+                     },
+                     {
+                         "version":  "1.0.0.0",
+                         "changelog":  "Compatibilidad universal con Jellyfin 10.8.x (targetAbi 10.8.0.0).",
+                         "targetAbi":  "10.8.0.0",
+                         "sourceUrl":  "https://github.com/emulemexico/Jellyfin-Terminal/releases/download/v1.0.0.0/Jellyfin.Plugin.Terminal_1.0.0.0.zip",
+                         "checksum":  "5dd80815a1188ddf331fc469d9b80cd6",
+                         "timestamp":  "2026-09-08T20:07:16Z"
+                     }
+                 ]
+}
 ]

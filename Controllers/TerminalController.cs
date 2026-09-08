@@ -7,8 +7,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Common.Api;
-using Microsoft.AspNetCore.Authorization;
+using MediaBrowser.Controller.Library;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -19,17 +18,18 @@ namespace Jellyfin.Plugin.Terminal.Controllers;
 /// WebSockets controller providing interactive shell access for administrators.
 /// </summary>
 [ApiController]
-[Authorize(Policy = Policies.RequiresElevation)]
 [Route("Terminal")]
 public class TerminalController : ControllerBase
 {
+    private readonly IUserManager _userManager;
     private readonly ILogger<TerminalController> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TerminalController"/> class.
     /// </summary>
-    public TerminalController(ILogger<TerminalController> logger)
+    public TerminalController(IUserManager userManager, ILogger<TerminalController> logger)
     {
+        _userManager = userManager;
         _logger = logger;
     }
 
@@ -37,23 +37,48 @@ public class TerminalController : ControllerBase
     /// WebSocket endpoint for terminal session.
     /// </summary>
     [HttpGet("Socket")]
-    public async Task GetSocket()
+    public async Task GetSocket([FromQuery] string? api_key, [FromQuery] string? userId)
     {
         if (!HttpContext.WebSockets.IsWebSocketRequest)
         {
             HttpContext.Response.StatusCode = (int)HttpStatusCode.BadRequest;
-            await HttpContext.Response.WriteAsync("Se requiere una conexión WebSocket.").ConfigureAwait(false);
+            await HttpContext.Response.WriteAsync("Se requiere una conexion WebSocket.").ConfigureAwait(false);
             return;
         }
 
-        using var webSocket = await HttpContext.WebSockets.AcceptWebSocketAsync().ConfigureAwait(false);
-        var username = User.Identity?.Name ?? "Admin";
-        _logger.LogInformation("Sesión de Terminal iniciada por el administrador {Username}.", username);
+        // 1. Validar parametros de conexion
+        if (string.IsNullOrWhiteSpace(api_key) || string.IsNullOrWhiteSpace(userId) || !Guid.TryParse(userId, out var userGuid))
+        {
+            _logger.LogWarning("Terminal: intento de conexion rechazado por credenciales ausentes o invalidas.");
+            HttpContext.Response.StatusCode = (int)HttpStatusCode.Unauthorized;
+            return;
+        }
 
-        await RunSessionAsync(webSocket, HttpContext.RequestAborted).ConfigureAwait(false);
+        // 2. Obtener usuario y verificar permisos de Administrador
+        var user = _userManager.GetUserById(userGuid);
+        if (user == null)
+        {
+            _logger.LogWarning("Terminal: usuario {UserId} no encontrado.", userId);
+            HttpContext.Response.StatusCode = (int)HttpStatusCode.Unauthorized;
+            return;
+        }
+
+        var userDto = _userManager.GetUserDto(user, string.Empty);
+        if (userDto?.Policy?.IsAdministrator != true)
+        {
+            _logger.LogWarning("Terminal: acceso denegado. El usuario {Username} ({UserId}) no es administrador.", user.Username, userId);
+            HttpContext.Response.StatusCode = (int)HttpStatusCode.Forbidden;
+            return;
+        }
+
+        // 3. Aceptar conexion WebSocket
+        using var webSocket = await HttpContext.WebSockets.AcceptWebSocketAsync().ConfigureAwait(false);
+        _logger.LogInformation("Terminal: conexion WebSocket aceptada para el administrador {Username}.", user.Username);
+
+        await RunSessionAsync(webSocket, user.Username, HttpContext.RequestAborted).ConfigureAwait(false);
     }
 
-    private async Task RunSessionAsync(WebSocket webSocket, CancellationToken cancellationToken)
+    private async Task RunSessionAsync(WebSocket webSocket, string username, CancellationToken cancellationToken)
     {
         string shell;
         string arguments = string.Empty;
@@ -65,7 +90,8 @@ public class TerminalController : ControllerBase
         }
         else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            shell = Environment.GetEnvironmentVariable("COMSPEC") ?? "powershell.exe";
+            shell = Environment.GetEnvironmentVariable("COMSPEC") ?? "cmd.exe";
+            arguments = "";
         }
         else
         {
@@ -92,13 +118,16 @@ public class TerminalController : ControllerBase
         {
             if (!process.Start())
             {
-                _logger.LogError("No se pudo iniciar el shell: {Shell}", shell);
+                var errMsg = $"\r\n\x1b[1;31m[Error: no se pudo iniciar el shell {shell}]\x1b[0m\r\n";
+                await SendTextAsync(webSocket, errMsg, cancellationToken).ConfigureAwait(false);
                 return;
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Excepción al iniciar el shell {Shell}", shell);
+            _logger.LogError(ex, "Terminal: excepcion al iniciar el shell {Shell}", shell);
+            var errMsg = $"\r\n\x1b[1;31m[Error al iniciar shell {shell}: {ex.Message}]\x1b[0m\r\n";
+            await SendTextAsync(webSocket, errMsg, cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -122,19 +151,28 @@ public class TerminalController : ControllerBase
         }
         catch
         {
-            // Ignorar errores al forzar la salida del proceso
+            // Ignorar errores al terminar el proceso
         }
 
         if (webSocket.State == WebSocketState.Open || webSocket.State == WebSocketState.CloseReceived)
         {
             try
             {
-                await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Sesión cerrada", CancellationToken.None).ConfigureAwait(false);
+                await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Sesion finalizada", CancellationToken.None).ConfigureAwait(false);
             }
             catch
             {
-                // Ignorar excepciones al cerrar el socket
+                // Ignorar errores al cerrar el websocket
             }
+        }
+    }
+
+    private static async Task SendTextAsync(WebSocket webSocket, string text, CancellationToken token)
+    {
+        if (webSocket.State == WebSocketState.Open)
+        {
+            var bytes = Encoding.UTF8.GetBytes(text);
+            await webSocket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, token).ConfigureAwait(false);
         }
     }
 

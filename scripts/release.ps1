@@ -112,7 +112,7 @@ if (-not $pluginEntry) {
 $newVersionObj = [PSCustomObject]@{
     version   = $Version
     changelog = $Changelog
-    targetAbi = "10.11.0.0"
+    targetAbi = "10.8.0.0"
     sourceUrl = $sourceUrl
     checksum  = $md5
     timestamp = $timestamp
