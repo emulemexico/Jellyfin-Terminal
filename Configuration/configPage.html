@@ -111,7 +111,8 @@
 
         let term = null;
         let fitAddon = null;
-        let socket = null;
+        let abortController = null;
+        let currentSessionId = null;
 
         function updateStatus(connected, text) {
             const dot = $('#termStatusDot');
@@ -126,24 +127,30 @@
         }
 
         function cleanup() {
-            if (socket) {
+            if (abortController) {
+                try { abortController.abort(); } catch (e) {}
+                abortController = null;
+            }
+            if (currentSessionId) {
                 try {
-                    socket.onclose = null;
-                    socket.onerror = null;
-                    socket.close();
+                    const token = ApiClient.accessToken();
+                    const userId = ApiClient.getCurrentUserId();
+                    fetch(ApiClient.getUrl('Terminal/Close', {
+                        sessionId: currentSessionId,
+                        api_key: token,
+                        userId: userId
+                    }), { method: 'POST', keepalive: true }).catch(() => {});
                 } catch (e) {}
-                socket = null;
+                currentSessionId = null;
             }
             if (term) {
-                try {
-                    term.dispose();
-                } catch (e) {}
+                try { term.dispose(); } catch (e) {}
                 term = null;
             }
             fitAddon = null;
         }
 
-        function connectTerminal() {
+        async function connectTerminal() {
             cleanup();
 
             const container = $('#terminalBox');
@@ -178,58 +185,65 @@
                 try { fitAddon.fit(); } catch (e) {}
             }
 
+            currentSessionId = 'term_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
             const token = ApiClient.accessToken();
             const userId = ApiClient.getCurrentUserId();
 
-            // Usar ApiClient.getUrl para asegurar el base path y host exactos del servidor
-            const httpUrl = ApiClient.getUrl('Terminal/Socket', {
+            abortController = new AbortController();
+            updateStatus(false, 'Conectando...');
+
+            const streamUrl = ApiClient.getUrl('Terminal/Stream', {
+                sessionId: currentSessionId,
                 api_key: token,
                 userId: userId
             });
 
-            const wsUrl = httpUrl.replace(/^http:/i, 'ws:').replace(/^https:/i, 'wss:');
-            console.log('[Jellyfin Terminal] Conectando WebSocket a:', wsUrl);
-
-            updateStatus(false, 'Conectando...');
+            // Conectar el input del teclado
+            term.onData(function (data) {
+                if (!currentSessionId) return;
+                const inputUrl = ApiClient.getUrl('Terminal/Input', {
+                    sessionId: currentSessionId,
+                    api_key: token,
+                    userId: userId
+                });
+                fetch(inputUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ data: data })
+                }).catch(function (err) {
+                    console.error('[Terminal Input Error]', err);
+                });
+            });
 
             try {
-                socket = new WebSocket(wsUrl);
-                socket.binaryType = 'arraybuffer';
-
-                socket.onopen = function () {
-                    updateStatus(true, 'Conectado');
-                    term.writeln('\x1b[1;32m=== Sesión iniciada con el host ===\x1b[0m\r\n');
-                };
-
-                socket.onmessage = function (event) {
-                    if (typeof event.data === 'string') {
-                        term.write(event.data);
-                    } else {
-                        const decoder = new TextDecoder('utf-8');
-                        term.write(decoder.decode(event.data));
-                    }
-                };
-
-                socket.onerror = function (err) {
-                    console.error('[Jellyfin Terminal] WebSocket error:', err);
-                    updateStatus(false, 'Error de conexión');
-                    term.writeln('\r\n\x1b[1;31m[Error de comunicación WebSocket]\x1b[0m\r\n');
-                };
-
-                socket.onclose = function (ev) {
-                    console.warn('[Jellyfin Terminal] WebSocket cerrado:', ev.code, ev.reason);
-                    updateStatus(false, 'Desconectado');
-                    term.writeln('\r\n\x1b[1;33m[Sesión finalizada por el servidor]\x1b[0m\r\n');
-                };
-
-                term.onData(function (data) {
-                    if (socket && socket.readyState === WebSocket.OPEN) {
-                        socket.send(data);
-                    }
+                const response = await fetch(streamUrl, {
+                    signal: abortController.signal
                 });
+
+                if (!response.ok) {
+                    throw new Error('HTTP ' + response.status + ' (' + response.statusText + ')');
+                }
+
+                updateStatus(true, 'Conectado');
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder('utf-8');
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    if (value) {
+                        term.write(decoder.decode(value));
+                    }
+                }
+
+                updateStatus(false, 'Sesión finalizada');
+                term.writeln('\r\n\x1b[1;33m[Sesión finalizada por el proceso host]\x1b[0m\r\n');
             } catch (err) {
-                console.error('[Jellyfin Terminal] Excepción:', err);
-                updateStatus(false, 'Error de inicio');
+                if (err.name === 'AbortError') return;
+                console.error('[Terminal Stream Error]', err);
+                updateStatus(false, 'Error de conexión');
+                term.writeln('\r\n\x1b[1;31m[Error de conexión: ' + err.message + ']\x1b[0m\r\n');
             }
         }
 
@@ -255,7 +269,6 @@
             cleanup();
         });
 
-        // Inicio si ya está en vista
         setTimeout(connectTerminal, 200);
     })();
     </script>
