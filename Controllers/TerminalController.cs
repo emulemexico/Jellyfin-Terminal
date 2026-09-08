@@ -1,11 +1,11 @@
 ﻿using System;
 using System.IO;
 using System.Net;
+using System.Runtime.InteropServices;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.Terminal.Services;
 using MediaBrowser.Controller.Library;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 
@@ -13,8 +13,13 @@ namespace Jellyfin.Plugin.Terminal.Controllers;
 
 public sealed class TerminalInputRequest
 {
+    [JsonPropertyName("command")]
+    public string Command { get; set; } = string.Empty;
+
     [JsonPropertyName("data")]
     public string Data { get; set; } = string.Empty;
+
+    public string GetText() => !string.IsNullOrEmpty(Command) ? Command : Data;
 }
 
 [ApiController]
@@ -46,76 +51,45 @@ public class TerminalController : ControllerBase
         return dto?.Policy?.IsAdministrator == true;
     }
 
-    [HttpGet("Stream")]
-    public async Task GetStream([FromQuery] string sessionId, [FromQuery] string? api_key, [FromQuery] string? userId)
+    [HttpGet("Info")]
+    public IActionResult GetInfo([FromQuery] string? sessionId, [FromQuery] string? api_key, [FromQuery] string? userId)
     {
         if (!IsAuthorizedAdmin(api_key, userId, out var username))
         {
-            HttpContext.Response.StatusCode = (int)HttpStatusCode.Forbidden;
-            return;
+            return Forbid();
         }
 
-        if (string.IsNullOrWhiteSpace(sessionId))
+        var session = TerminalSessionManager.GetOrCreateSession(sessionId ?? "default");
+        var os = RuntimeInformation.OSDescription;
+
+        return Ok(new
         {
-            sessionId = Guid.NewGuid().ToString("N");
-        }
-
-        _logger.LogInformation("Terminal: Stream abierto para {Username} (Sesion: {SessionId})", username, sessionId);
-
-        Response.ContentType = "text/plain; charset=utf-8";
-        Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
-        Response.Headers["X-Accel-Buffering"] = "no";
-
-        var session = TerminalSessionManager.GetOrCreateSession(sessionId, _logger, Plugin.Instance?.Configuration.CustomShellPath);
-
-        try
-        {
-            await foreach (var chunk in session.Reader.ReadAllAsync(HttpContext.RequestAborted).ConfigureAwait(false))
-            {
-                await Response.Body.WriteAsync(chunk, HttpContext.RequestAborted).ConfigureAwait(false);
-                await Response.Body.FlushAsync(HttpContext.RequestAborted).ConfigureAwait(false);
-            }
-        }
-        catch (OperationCanceledException) { }
-        finally
-        {
-            TerminalSessionManager.CloseSession(sessionId);
-            _logger.LogInformation("Terminal: Stream finalizado (Sesion: {SessionId})", sessionId);
-        }
+            os = os,
+            cwd = session.CurrentDirectory,
+            user = username,
+            isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+        });
     }
 
-    [HttpPost("Input")]
-    public async Task<IActionResult> PostInput([FromQuery] string sessionId, [FromQuery] string? api_key, [FromQuery] string? userId, [FromBody] TerminalInputRequest request)
+    [HttpPost("Execute")]
+    public async Task<IActionResult> Execute([FromQuery] string? sessionId, [FromQuery] string? api_key, [FromQuery] string? userId, [FromBody] TerminalInputRequest? request)
     {
         if (!IsAuthorizedAdmin(api_key, userId, out _))
         {
             return Forbid();
         }
 
-        if (string.IsNullOrWhiteSpace(sessionId) || string.IsNullOrEmpty(request?.Data))
+        var session = TerminalSessionManager.GetOrCreateSession(sessionId ?? "default");
+        var commandText = request?.GetText() ?? string.Empty;
+
+        var result = await session.ExecuteCommandAsync(commandText, Plugin.Instance?.Configuration.CustomShellPath, _logger).ConfigureAwait(false);
+
+        return Ok(new
         {
-            return BadRequest();
-        }
-
-        var session = TerminalSessionManager.GetOrCreateSession(sessionId, _logger, Plugin.Instance?.Configuration.CustomShellPath);
-        await session.WriteInputAsync(request.Data).ConfigureAwait(false);
-
-        return Ok();
-    }
-
-    [HttpPost("Close")]
-    public IActionResult PostClose([FromQuery] string sessionId, [FromQuery] string? api_key, [FromQuery] string? userId)
-    {
-        if (!IsAuthorizedAdmin(api_key, userId, out _))
-        {
-            return Forbid();
-        }
-
-        if (!string.IsNullOrWhiteSpace(sessionId))
-        {
-            TerminalSessionManager.CloseSession(sessionId);
-        }
-
-        return Ok();
+            output = result.Output,
+            error = result.Error,
+            exitCode = result.ExitCode,
+            cwd = result.NewCwd
+        });
     }
 }
