@@ -1,0 +1,42 @@
+name: Build and Verify
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build plugin (Release)
+        run: dotnet build -c Release --no-restore
+
+      - name: Verify plugin assembly
+        run: |
+          if [ ! -f "bin/Release/net9.0/Jellyfin.Plugin.Terminal.dll" ]; then
+            echo "Error: Jellyfin.Plugin.Terminal.dll was not generated."
+            exit 1
+          fi
+          echo "Build successful and assembly verified."
+
+      - name: Validate manifest.json
+        run: |
+          python3 -c "import json; json.load(open('manifest.json', encoding='utf-8'))"
+          echo "manifest.json is valid JSON."

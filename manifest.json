@@ -1,0 +1,11 @@
+[
+  {
+    "guid": "a5e4d291-7643-41bb-b892-91e84fc5711b",
+    "name": "Terminal",
+    "description": "Terminal web interactiva integrada en el Dashboard de Jellyfin para administradores.",
+    "overview": "Terminal interactiva en tiempo real para administracion del servidor.",
+    "owner": "emulemexico",
+    "category": "General",
+    "versions": []
+  }
+]

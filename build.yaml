@@ -1,0 +1,12 @@
+﻿---
+name: "Terminal"
+guid: "a5e4d291-7643-41bb-b892-91e84fc5711b"
+version: "1.0.0.0"
+targetAbi: "10.11.0.0"
+framework: "net9.0"
+overview: "Terminal web interactiva para administracion del servidor Jellyfin."
+description: "Proporciona una consola bash o powershell interactiva en tiempo real en el Dashboard de Jellyfin via WebSockets y xterm.js."
+category: "General"
+owner: "emulemexico"
+artifacts:
+  - "Jellyfin.Plugin.Terminal.dll"
