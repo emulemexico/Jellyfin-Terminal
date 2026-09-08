@@ -74,6 +74,7 @@
             padding: 8px;
             box-sizing: border-box;
             background-color: #0d1117;
+            cursor: text;
         }
         #terminalBox .xterm-viewport {
             overflow-y: auto !important;
@@ -114,6 +115,10 @@
         let abortController = null;
         let currentSessionId = null;
 
+        let currentLine = '';
+        let history = [];
+        let historyIndex = -1;
+
         function updateStatus(connected, text) {
             const dot = $('#termStatusDot');
             const txt = $('#termStatusText');
@@ -148,6 +153,35 @@
                 term = null;
             }
             fitAddon = null;
+            currentLine = '';
+            historyIndex = -1;
+        }
+
+        function clearLineOnScreen() {
+            while (currentLine.length > 0) {
+                term.write('\b \b');
+                currentLine = currentLine.slice(0, -1);
+            }
+        }
+
+        function sendLineToHost(text) {
+            if (!currentSessionId) return;
+            const token = ApiClient.accessToken();
+            const userId = ApiClient.getCurrentUserId();
+
+            const inputUrl = ApiClient.getUrl('Terminal/Input', {
+                sessionId: currentSessionId,
+                api_key: token,
+                userId: userId
+            });
+
+            fetch(inputUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ data: text })
+            }).catch(function (err) {
+                console.error('[Terminal Send Error]', err);
+            });
         }
 
         async function connectTerminal() {
@@ -185,6 +219,11 @@
                 try { fitAddon.fit(); } catch (e) {}
             }
 
+            term.focus();
+            container.addEventListener('click', function () {
+                if (term) term.focus();
+            });
+
             currentSessionId = 'term_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
             const token = ApiClient.accessToken();
             const userId = ApiClient.getCurrentUserId();
@@ -192,27 +231,74 @@
             abortController = new AbortController();
             updateStatus(false, 'Conectando...');
 
+            // Manejo de entrada de teclado interactiva con echo local
+            term.onData(function (data) {
+                // Enter
+                if (data === '\r') {
+                    term.write('\r\n');
+                    const cmd = currentLine;
+                    if (cmd.trim().length > 0) {
+                        history.push(cmd);
+                        historyIndex = history.length;
+                    }
+                    currentLine = '';
+                    sendLineToHost(cmd + '\r\n');
+                    return;
+                }
+
+                // Backspace
+                if (data === '\x7f' || data === '\b') {
+                    if (currentLine.length > 0) {
+                        currentLine = currentLine.slice(0, -1);
+                        term.write('\b \b');
+                    }
+                    return;
+                }
+
+                // Ctrl + C
+                if (data === '\x03') {
+                    term.write('^C\r\n');
+                    currentLine = '';
+                    sendLineToHost('\x03');
+                    return;
+                }
+
+                // Flecha Arriba (Historial anterior)
+                if (data === '\x1b[A') {
+                    if (history.length > 0 && historyIndex > 0) {
+                        historyIndex--;
+                        clearLineOnScreen();
+                        currentLine = history[historyIndex];
+                        term.write(currentLine);
+                    }
+                    return;
+                }
+
+                // Flecha Abajo (Historial siguiente)
+                if (data === '\x1b[B') {
+                    if (history.length > 0 && historyIndex < history.length - 1) {
+                        historyIndex++;
+                        clearLineOnScreen();
+                        currentLine = history[historyIndex];
+                        term.write(currentLine);
+                    } else {
+                        historyIndex = history.length;
+                        clearLineOnScreen();
+                    }
+                    return;
+                }
+
+                // Caracteres imprimibles normales y Tab
+                if (data >= ' ' || data === '\t') {
+                    currentLine += data;
+                    term.write(data);
+                }
+            });
+
             const streamUrl = ApiClient.getUrl('Terminal/Stream', {
                 sessionId: currentSessionId,
                 api_key: token,
                 userId: userId
-            });
-
-            // Conectar el input del teclado
-            term.onData(function (data) {
-                if (!currentSessionId) return;
-                const inputUrl = ApiClient.getUrl('Terminal/Input', {
-                    sessionId: currentSessionId,
-                    api_key: token,
-                    userId: userId
-                });
-                fetch(inputUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ data: data })
-                }).catch(function (err) {
-                    console.error('[Terminal Input Error]', err);
-                });
             });
 
             try {
@@ -225,6 +311,7 @@
                 }
 
                 updateStatus(true, 'Conectado');
+                term.focus();
 
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder('utf-8');
@@ -252,7 +339,10 @@
         });
 
         $('#btnClear').addEventListener('click', function () {
-            if (term) term.clear();
+            if (term) {
+                term.clear();
+                term.focus();
+            }
         });
 
         window.addEventListener('resize', function () {

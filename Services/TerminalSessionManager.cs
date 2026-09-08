@@ -30,21 +30,22 @@ public sealed class TerminalSession : IDisposable
         _channel = Channel.CreateUnbounded<byte[]>(new UnboundedChannelOptions { SingleReader = true });
 
         string shell;
-        string arguments = string.Empty;
+        string arguments;
 
         if (!string.IsNullOrWhiteSpace(customShell) && System.IO.File.Exists(customShell))
         {
             shell = customShell;
+            arguments = "";
         }
         else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
             shell = Environment.GetEnvironmentVariable("COMSPEC") ?? "cmd.exe";
-            arguments = "";
+            arguments = "/K";
         }
         else
         {
             shell = System.IO.File.Exists("/bin/bash") ? "/bin/bash" : "/bin/sh";
-            arguments = "-i";
+            arguments = "";
         }
 
         var startInfo = new ProcessStartInfo
@@ -65,7 +66,13 @@ public sealed class TerminalSession : IDisposable
         try
         {
             _process.Start();
-            _logger.LogInformation("Terminal: Proceso iniciado [{Shell}] para sesion {SessionId}", shell, sessionId);
+            _logger.LogInformation("Terminal: Proceso iniciado [{Shell}] con args [{Args}] para sesion {SessionId}", shell, arguments, sessionId);
+
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                var banner = Encoding.UTF8.GetBytes("\x1b[1;32m=== Terminal del Servidor Jellyfin (Linux) ===\x1b[0m\r\n# ");
+                _channel.Writer.TryWrite(banner);
+            }
 
             Task.Run(() => ReadStreamLoopAsync(_process.StandardOutput.BaseStream, _cts.Token));
             Task.Run(() => ReadStreamLoopAsync(_process.StandardError.BaseStream, _cts.Token));
